@@ -1,0 +1,164 @@
+---
+title: "Creating plot x trait weighted average dataframe"
+author: "Claire Tortorelli"
+date: "September 3, 2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(multcomp)
+library(car)
+library(data.table)
+library(here)
+```
+
+# Data prep
+Read in trait data
+```{r data}
+#species x traits
+traits <- read_csv(here("data","Alltraits.averagedBySpecies_7traits.csv"))
+
+```
+
+
+Log transform trait values
+```{r}
+#Set species to row names
+rownames(traits) <- traits$species 
+traits$species <- NULL 
+
+# log transform trait values
+traits.log <- log(traits)
+
+```
+
+## Explore correlations in the trait matrix
+```{r}
+
+#explore correlations 
+cor(as.matrix(traits.log)) 
+#rootD and fine:totalRootV are the most strongly correlated: 0.81
+
+#plot correlations
+pairs(traits.log, cex.labels=1.5)
+
+
+```
+
+Remove ventenata from traits matrix & create ventenata only traits matrix
+```{r}
+#remove vedu from community matrix
+traits.log.wo.vd <- traits.log[-36,]
+
+#create a vedu only trait matrix
+VDtraits <- traits.log[36,]
+#write.csv(VDtraits, "vedu_traits_not.scaled.csv")
+
+```
+
+## Multiply species-plot matrix by species-trait matrix for a plot-trait matrix
+
+### Prep matrices for multiplication
+Species x Plot matrix prep
+```{r}
+#read in plot_species data (plot x species)
+plot_sp <- read_csv(here("data", "2020sgh_vegcover_wide_4_TRAITS_community_subplots.csv"))
+
+#set plot ID to rownames
+rownames(plot_sp) <- plot_sp$plot_quad 
+plot_sp$plot_quad <- NULL 
+
+# Keep only species included in trait matrix - remove rare species that occurred in fewer than 4 plots
+species4anal <- rownames(traits.log)
+plot_sp <- plot_sp[ , names(plot_sp) %in% species4anal]
+
+#remove VEDU column from trait matrix for community only trait matrix
+plot_sp.wo.vd <- plot_sp[ , !names(plot_sp) %in% c('VEDU')]
+
+#write.csv(plot_sp.wo.vd, "plot_sp.wo.vd.csv")
+
+
+
+```
+
+## multiply plot-species and species- traits matrices
+weight trait matrix by species abundance
+```{r}
+# check to see if species are present and in same order
+species.in.plot <- colnames(plot_sp)
+species.in.plot == species4anal
+
+# multiply matrices
+plot.sp.traitmatrix <- data.matrix(plot_sp.wo.vd) %*% data.matrix(traits.log.wo.vd)
+
+```
+
+Calculate weighed average for community matrix
+divide weighted sum (plot.sp.trait matrix) by total veg cover (without vd)
+```{r}
+#create a new df to add a total veg cover col to
+plot_sp.wo.vd.totalveg <- plot_sp.wo.vd
+
+#sum rows to get a total veg cover col
+plot_sp.wo.vd.totalveg$totalveg <- rowSums(plot_sp.wo.vd)
+
+#extract the total veg col to a new df
+totalveg <- data.frame(plot_sp.wo.vd.totalveg[ , names(plot_sp.wo.vd.totalveg) %in% c('totalveg')])
+
+#rename col to totalveg
+colnames(totalveg) <- "totalveg"
+
+#divide trait matrix by total veg
+plot.sp.traitmatrix.tveg <- plot.sp.traitmatrix
+for (i in 1:dim(plot.sp.traitmatrix)[1]){ #1 indicates rows, 2 indicates cols
+  plot.sp.traitmatrix.tveg[i,] = plot.sp.traitmatrix[i,]/as.double(totalveg[i,1])
+  }
+
+```
+
+center and scale plot-trait matrix by mean and sd 
+(including vedu only "subplot" for comparison to community values)
+```{r}
+
+#add ventenata "plot" to matrix with all vd traits
+plot.sp.traitmatrix.tveg.vd <- rbind(plot.sp.traitmatrix.tveg, VDtraits)
+
+#center and scale
+library(robustHD)
+plot.sp.traitmatrix.tveg.vd.stan <- data.frame(standardize(as.matrix(plot.sp.traitmatrix.tveg.vd), centerFun = mean, scaleFun = sd))
+
+#remove vedu row from plot-trait matrix
+plot.sp.traitmatrix.tveg.stan.wovd <- plot.sp.traitmatrix.tveg.vd.stan[-151,]
+
+#create a vedu only standardized "plot" value
+vedu.trait.stan <- data.frame(plot.sp.traitmatrix.tveg.vd.stan[151,])
+
+#write.csv(vedu.trait.stan, "vedu.trait2020.stan.after.weighted.average.all.cplots.csv")
+```
+
+
+# Prep df for analysis
+```{r}
+#assign rownames to col 1
+traitdf <- as.data.frame(setDT(as.data.frame(plot.sp.traitmatrix.tveg.stan.wovd), keep.rownames = TRUE)[])
+names(traitdf)[names(traitdf) == "rn"] <- "plot_quad"
+
+
+#create cols for Vegtype, Plot, Plot_no, and treatment
+traitdf$vegtype <- substr(traitdf$plot_quad, 1, 4)
+traitdf$plot <- substr(traitdf$plot_quad, 1, 6)
+traitdf$plotno <- substr(traitdf$plot_quad, 5, 6)
+
+
+#reorder vegtype factor
+traitdf$vegtype <- factor(traitdf$vegtype, levels = c("ARRI", "ARAR" , "SEEP"))
+
+#write plot sp trait matrix (traits + binary, log, standardized, scaled, and weighted average)
+write.csv(traitdf, "data/plot.trait.matrix.2020.log.woVD.scaled.after.weighted.average.csv", row.names = F)
+```
+
+
+
