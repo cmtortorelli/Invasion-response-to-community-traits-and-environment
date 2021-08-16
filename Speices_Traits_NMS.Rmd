@@ -111,7 +111,7 @@ plot(sampleScores_abund$MDS1, sampleScores_abund$MDS2, xlab='NMS 1', ylab='NMS 2
 
 points(sampleScores_abund[,2:3], pch=16, cex=(sampleScores_abund$log_cover/2), col="#98DEEC")
 
-points(sampleScores_abund[,2:3], pch=16, col ="#2F76BC")
+points(sampleScores_abund[,2:3], pch=16, col ="#2F76BC", cex = 0.5)
 
 
 arrows(0, 0, variableScores[, 1], variableScores[, 2], length=0.1, angle=20, col ="#A6761D")
