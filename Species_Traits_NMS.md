@@ -1,0 +1,111 @@
+species in trait space NMS
+================
+Claire Tortorelli
+September 3, 2019
+
+## Read in data
+
+``` r
+traits <- read.csv(here("data","allTraits_averagedBySpecies_USDAcodes.csv"))
+
+#read in abudnance data
+abund <- read.csv(here("data","2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
+```
+
+## Prep data for NMS
+
+Average cover by species
+
+``` r
+#get m
+abund_sum <- abund[,2:40] %>% pivot_longer(cols = 1:39, 
+                            names_to = "species", values_to = "abund") %>%
+                            group_by(species) %>%
+                            summarise(total_cover = sum(abund),
+                                      mean_cover = mean(abund),
+                                      log_cover = log(abund + 1),
+                                     sd_mean = sd(abund))
+```
+
+Log transform trait values
+
+``` r
+#Set species to row names
+rownames(traits) <- traits$species 
+traits$species <- NULL 
+
+# log transform trait values
+traits.log <- log(traits)
+```
+
+## explore correlations
+
+``` r
+#svg("figures/log_tranformed_raw_traits_corPlot.svg")
+#check out correlations
+cor(traits.log) 
+pairs(traits.log)
+
+#dev.off()
+```
+
+Some traits appear not linearly correlated, so using NMDS rather than
+PCA
+
+scale and center data
+
+``` r
+traits.stan <- standardize(traits.log, centerFun = mean, scaleFun = sd)
+```
+
+## Run NMS (species in trait space)
+
+metaMDS can’t be run on negative values so shifting to the minimum value
+so that scores are not negative
+
+``` r
+#shift min so that scores are not negative
+minShift <- function(x) {x + abs(min(x))}
+traits.stan.shift <- apply(traits.stan, 2, minShift)
+
+#run NMS on shifted data with bray distance measure
+traits.stan.shift.NMS <- metaMDS(traits.stan.shift, distance='bray', k=2, trymax=50, autotransform=FALSE, wasscores=TRUE, noshare=FALSE) 
+#bray curtis tends to perform better with species and sample similarity
+traits.stan.shift.NMS
+
+#plot species ('sites') and traits ('species')
+plot(traits.stan.shift.NMS, type='t', display=c('sites', 'species'))
+```
+
+``` r
+#extract scores to plot with vectors
+variableScores <- data.frame(traits.stan.shift.NMS$species)
+sampleScores <- data.frame(traits.stan.shift.NMS$points)
+
+#add species abundances to points dataframe
+sampleScores$species <- rownames(sampleScores)
+sampleScores_abund <- merge(sampleScores, abund_sum)
+```
+
+## Plot NMS
+
+``` r
+#svg("figures/traitnms_scaled_by_abund.svg", height = 5.5, width = 8)
+
+par(family = "sans")
+plot(sampleScores_abund$MDS1, sampleScores_abund$MDS2, xlab='NMS 1', ylab='NMS 2', type='n', asp=1, las=1)
+
+points(sampleScores_abund[,2:3], pch=16, cex=(sampleScores_abund$log_cover/2), col="#98DEEC")
+
+points(sampleScores_abund[,2:3], pch=16, col ="#2F76BC", cex = 0.5)
+
+
+arrows(0, 0, variableScores[, 1], variableScores[, 2], length=0.1, angle=20, col ="#A6761D")
+ 
+#set text
+text(variableScores[, 1], variableScores[, 2], pos = 3, offset = 0.5, col = "black", font = 2, rownames(variableScores), cex=0.7)
+
+text(sampleScores_abund$MDS1, sampleScores_abund$MDS2, pos = 1, offset = 0.3, col =  "grey3", font = 1, sampleScores_abund$species,  cex=0.7)
+
+#dev.off()
+```
