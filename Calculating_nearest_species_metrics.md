@@ -1,37 +1,21 @@
----
-title: "Calculating nearest species dissimilarity metrics"
-author: "Claire Tortorelli"
-date: "September 3, 2020"
-output:
-  github_document
----
-
-```{r setup, include=FALSE}
-
-knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
-
-
-library(tidyverse)
-library(multcomp)
-library(car)
-library(data.table)
-library(here)
-library(robustHD)
-```
+Calculating nearest species dissimilarity metrics
+================
+Claire Tortorelli
+September 3, 2020
 
 ## Data prep
 
 Read in trait data
-```{r data}
+
+``` r
 #species x traits
 traits <- read_csv(here("data", "allTraits_averagedBySpecies_USDAcodes.csv"))
-
 ```
 
+standardize the trait matrix "log- transform and standardized using the
+formula
 
-standardize the trait matrix "log- transform and standardized using the formula 
-
-```{r}
+``` r
 #set species to row names to standardize
 traits <- column_to_rownames(traits, "species")
 
@@ -41,12 +25,11 @@ traits.log <- log(traits)
 #standardize by trait mean and sd
 
 traits.stan <- standardize(traits.log, centerFun = mean, scaleFun = sd)
-
 ```
 
-
 remove vedu from traits matrix and create vd only traits matrix
-```{r}
+
+``` r
 #remove vedu from traits matrix
 
 traits.stan.wovd <- traits.stan[-36,]
@@ -59,13 +42,16 @@ VDtraits <- traits.stan[36,]
 ### Species plot data
 
 read in species plot data
-```{r}
+
+``` r
 #read in plot_species data (plot x species)
 plot_sp <- read_csv(here("data","2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
 ```
 
-Remove rare species (not included in trait matrix) and VEDU from community matrix
-```{r}
+Remove rare species (not included in trait matrix) and VEDU from
+community matrix
+
+``` r
 #set plot ID to rownames
 plot_sp <- column_to_rownames(plot_sp, "plot_quad")
 
@@ -78,20 +64,23 @@ plot_sp.wo.vd <- plot_sp[,-c(36)]
 #write.csv(plot_sp.wo.vd, "plot_sp.wo.vd.csv")
 ```
 
-Convert to long format for calculating difference betweeen VEDU trait values and other species present in the community trait values
-```{r}
+Convert to long format for calculating difference betweeen VEDU trait
+values and other species present in the community trait values
+
+``` r
 # add plot_quad is first row
 plot_sp.wo.vd$plot_quad <- rownames(plot_sp.wo.vd)
 
 # convert to long format
 plot_spwovd.l <- gather(plot_sp.wo.vd, "species", "cover", -plot_quad)
-
 ```
 
 ## Calculate nearest species distance metric
 
-Calculate difference between each species trait values and vedu trait values
-```{r}
+Calculate difference between each species trait values and vedu trait
+values
+
+``` r
 vd.dif.traits <- traits.stan.wovd
 
 for (i in 1:dim(vd.dif.traits)[1]){ #1 indicates rows, 2 indicates cols
@@ -107,12 +96,11 @@ diff_plot.merge <- merge(plot_spwovd.l, vd.dif.traits)
 
 #remove species from subplots where cover = 0 (they don't occur in these subplots)
 diff_plot.merge0 <- subset(diff_plot.merge, cover > 0)
-
 ```
 
+Get trait values just above and below ventenata’s
 
-Get trait values just above and below ventenata's
-```{r}
+``` r
 #write functions to get the trait values just above and below vedu's
 get.min <- function(x) {
 min(x[which(x > 0)])}
@@ -122,11 +110,11 @@ max(x[which(x < 0)])}
 
 # calcualte the trait value just higher than VEDU's
 gap_higher <- diff_plot.merge0 %>% group_by(plot_quad) %>%
-            summarise_at(c("SLA", "root.shoot",	"RootLength.cm",	"RootAvgDiam.mm",	"finerootV.totalrootV",	"height", "N.perc"), get.min) 
+            summarise_at(c("SLA", "root.shoot", "RootLength.cm",    "RootAvgDiam.mm",   "finerootV.totalrootV", "height", "N.perc"), get.min) 
 
 #just lower than VEDU's
 gap_lower <- diff_plot.merge0 %>% group_by(plot_quad) %>%
-            summarise_at(c("SLA", "root.shoot",	"RootLength.cm",	"RootAvgDiam.mm",	"finerootV.totalrootV",	"height", "N.perc"), get.max) 
+            summarise_at(c("SLA", "root.shoot", "RootLength.cm",    "RootAvgDiam.mm",   "finerootV.totalrootV", "height", "N.perc"), get.max) 
                               
 
 
@@ -136,11 +124,14 @@ gap.l.long <- gather(gap_lower, "trait", "low.value", -plot_quad)
 gap.traits <- cbind(gap.h.long, gap.l.long[,3])
 ```
 
-### Calculate trait distance to nearest functional species(from VEDU) 
-according to Catford et al. (2019) Supplemental material
+### Calculate trait distance to nearest functional species(from VEDU)
 
-Calculate absolute value of nearest functional species trait distance to vedu 
-```{r}
+according to Catford et al. (2019) Supplemental material
+
+Calculate absolute value of nearest functional species trait distance to
+vedu
+
+``` r
 #convert to long format
 VDtraits.long <- gather(VDtraits, trait, vd.value) 
 #merge dataframes
@@ -150,7 +141,8 @@ gap.traits.wvd$vd.value <- abs(gap.traits.wvd$vd.value)
 ```
 
 Calculate nearest functional species trait distance
-```{r}
+
+``` r
 gap.traits.wvd$gap <- NA
 
 
@@ -167,14 +159,11 @@ for (i in 1:dim(gap.traits.wvd)[1]){ #1 indicates rows, 2 indicates cols
 }
   
 gap.traits.wide <- spread(gap.traits.wvd[,c(1,2,6)], trait, gap)
-
 ```
 
+Write plot\_gap df (log, standardized, and scaled prior to gap
+calculation)
 
-Write plot_gap df (log, standardized, and scaled prior to gap calculation)
-```{r}
+``` r
 #write.csv(gap.traits.wide, "nearest_species_distances.csv", row.names = F)
 ```
-
-
-

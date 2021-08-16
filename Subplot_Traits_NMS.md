@@ -1,0 +1,97 @@
+subplots in trait space NMS
+================
+Claire Tortorelli
+September 3, 2019
+
+## Prep and explore data
+
+read in data
+
+``` r
+traitxplot <- read.csv(here("data","Community_weighted_means.csv"))
+
+#remove VEDU
+traitxplot <- traitxplot[1:105,]
+#set rownames to subplot names
+rownames(traitxplot) <- traitxplot$plot_quad
+```
+
+## explore correlations
+
+``` r
+#svg("figures/CWM_traits_corPlot.svg")
+#check out correlations
+cor(traitxplot[,2:8]) 
+pairs(traitxplot[,2:8]) 
+#mostly linearly correlated, but some non-linear relationshisp, using NMS
+#dev.off()
+```
+
+## Run NMS (subplots in trait space)
+
+metaMDS can’t be run on negative values so shifting to the minimum value
+so that scores are not negative
+
+``` r
+#shift min so that scores are not negative
+minShift <- function(x) {x + abs(min(x))}
+traits.shift <- apply(traitxplot[,2:8], 2, minShift)
+
+#run NMS on shifted data with bray distance measure
+traits.shift.NMS <- metaMDS(traits.shift, distance='bray', k=2, trymax=50, autotransform=FALSE, wasscores=TRUE, noshare=FALSE) 
+
+traits.shift.NMS
+
+
+#plot species ('sites') and traits ('species')
+plot(traits.shift.NMS, type='t', display=c('sites', 'species'))
+```
+
+``` r
+#extract scores to plot with vectors
+variableScores <- traits.shift.NMS$species
+sampleScores <- traits.shift.NMS$points
+```
+
+extract points by vegetation type for plotting
+
+``` r
+ARAR <- traitxplot$vegtype == "ARAR" 
+ARRI <- traitxplot$vegtype == "ARRI" 
+SEEP <- traitxplot$vegtype == "SEEP" 
+```
+
+### Plot NMS
+
+``` r
+#svg("traitxplot.svg", width = 4.5, height = 4.5)
+
+
+par(family = "sans")
+plot(sampleScores[, 1], sampleScores[, 2], xlab='NMS 1', ylab='NMS 2', type='n', asp=1, las=1)
+#add convex hulls by vegetation type
+ordiellipse(traits.shift.NMS, traitxplot$vegtype, 
+            scaling = 3, label = TRUE, draw = "polygon",
+            col = c("#E6AB02", "#A6761D", "#666666"),
+            kind = "sd",
+            alpha = 70,
+            border = c("#E6AB02", "#A6761D", "#666666"))
+## ... and find centres and areas of the hulls
+
+#add in points for arar
+points(sampleScores[ARRI, 1], sampleScores[ARRI, 2], pch=16, cex=0.7, col="#A6761D")
+#add points for arri
+points(sampleScores[ARAR, 1], sampleScores[ARAR, 2], pch=16, cex=0.7, col="#E6AB02")
+#add poitns for arar
+points(sampleScores[SEEP, 1], sampleScores[SEEP, 2], pch=16, cex=0.7, col="#666666")
+#points(sampleScores, pch=16, cex=0.7, col="#92d400")
+arrows(0, 0, variableScores[, 1], variableScores[, 2], length=0.1, angle=20, col ="#505050")
+ 
+#set text
+text(variableScores[, 1], variableScores[, 2], pos = 3, offset = 0.5, col = "black", font = 2, rownames(variableScores), cex=0.7)
+
+
+#dev.off()
+
+#c("#A6761D", "#E6AB02" , "#666666")
+```

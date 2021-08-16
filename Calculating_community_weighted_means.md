@@ -1,64 +1,48 @@
----
-title: "Creating plot x trait weighted average dataframe"
-author: "Claire Tortorelli"
-date: "September 3, 2020"
-output:
-  github_document
----
-
-```{r setup, include=FALSE}
-
-knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
-
-library(tidyverse)
-library(multcomp)
-library(car)
-library(data.table)
-library(here)
-```
+Creating plot x trait weighted average dataframe
+================
+Claire Tortorelli
+September 3, 2020
 
 ## Data prep
 
 Read in trait data
-```{r data}
+
+``` r
 #species x traits
 traits <- read.csv(here("data","allTraits_averagedBySpecies_USDAcodes.csv"))
-
 ```
 
-
 Log transform trait values
-```{r}
+
+``` r
 #set plot ID to rownames
 traits <- column_to_rownames(traits, var = "species") 
 
 # log transform trait values
 traits.log <- log(traits)
-
 ```
 
 Explore correlations in the trait matrix
-```{r}
 
+``` r
 #explore correlations 
 cor(as.matrix(traits.log)) 
 #rootD and fine:totalRootV are the most strongly correlated: 0.81
 
 #plot correlations
 pairs(traits.log, cex.labels=1.5)
-
-
 ```
 
-Remove ventenata from traits matrix & create ventenata only traits matrix
-```{r}
+Remove ventenata from traits matrix & create ventenata only traits
+matrix
+
+``` r
 #remove vedu from community matrix
 traits.log.wo.vd <- traits.log[-36,]
 
 #create a vedu only trait matrix
 VDtraits <- traits.log[36,]
 #write.csv(VDtraits, "vedu_traits_not.scaled.csv")
-
 ```
 
 ## Calculate matrix of traits weighted by relative abundance in sublots
@@ -66,7 +50,8 @@ VDtraits <- traits.log[36,]
 Prep matrices for multiplication
 
 Species x Plot matrix prep
-```{r}
+
+``` r
 #read in plot_species data (plot x species)
 plot_sp <- read_csv(here("data", "2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
 
@@ -81,24 +66,25 @@ plot_sp <- plot_sp[ , names(plot_sp) %in% species4anal]
 plot_sp.wo.vd <- plot_sp[ , !names(plot_sp) %in% c('VEDU')]
 
 #write.csv(plot_sp.wo.vd, "plot_sp.wo.vd.csv")
-
 ```
 
 weight trait matrix by species abundance
 
 multiply plot-species and species- traits matrices
-```{r}
+
+``` r
 # check to see if species are present and in same order
 species.in.plot <- colnames(plot_sp)
 species.in.plot == species4anal
 
 # multiply matrices
 plot.sp.traitmatrix <- data.matrix(plot_sp.wo.vd) %*% data.matrix(traits.log.wo.vd)
-
 ```
 
-divide weighted sum (plot.sp.trait matrix) by total veg cover (without vd)
-```{r}
+divide weighted sum (plot.sp.trait matrix) by total veg cover (without
+vd)
+
+``` r
 #create a new df to add a total veg cover col to
 plot_sp.wo.vd.totalveg <- plot_sp.wo.vd
 
@@ -116,13 +102,12 @@ plot.sp.traitmatrix.tveg <- plot.sp.traitmatrix
 for (i in 1:dim(plot.sp.traitmatrix)[1]){ #1 indicates rows, 2 indicates cols
   plot.sp.traitmatrix.tveg[i,] = plot.sp.traitmatrix[i,]/as.double(totalveg[i,1])
   }
-
 ```
 
-center and scale plot-trait matrix by mean and sd 
-(including vedu only "subplot" for comparison to community values)
-```{r}
+center and scale plot-trait matrix by mean and sd (including vedu only
+“subplot” for comparison to community values)
 
+``` r
 #add ventenata "plot" to matrix with all vd traits
 plot.sp.traitmatrix.tveg.vd <- rbind(plot.sp.traitmatrix.tveg, VDtraits)
 
@@ -139,9 +124,9 @@ vedu.trait.stan <- data.frame(plot.sp.traitmatrix.tveg.vd.stan[151,])
 #write.csv(vedu.trait.stan, "vedu.trait2020.stan.after.weighted.average.all.cplots.csv")
 ```
 
-
 Clean up dataframe for modeling
-```{r}
+
+``` r
 #assign rownames to col 1
 traitdf <- as.data.frame(setDT(as.data.frame(plot.sp.traitmatrix.tveg.stan.wovd), keep.rownames = TRUE)[])
 names(traitdf)[names(traitdf) == "rn"] <- "plot_quad"
@@ -154,8 +139,5 @@ traitdf$plotno <- substr(traitdf$plot_quad, 5, 6)
 
 
 #write plot sp trait matrix (traits + binary, log, standardized, scaled, and weighted average)
-#write.csv(traitdf, "data/Community_weighted_means.csv", row.names = F)
+write.csv(traitdf, "data/Community_weighted_means.csv", row.names = F)
 ```
-
-
-

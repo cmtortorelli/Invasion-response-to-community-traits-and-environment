@@ -1,13 +1,16 @@
 ---
-title: "trait PCA"
+title: "species in trait space NMS"
 author: "Claire Tortorelli"
 date: "September 3, 2019"
 output:
-  word_document: default
-  html_document: default
+  github_document
 ---
 
 ```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+
 library(tidyverse)
 library(vegan)
 library(ggplot2)
@@ -68,13 +71,13 @@ pairs(traits.log)
 Some traits appear not linearly correlated, so using NMDS rather than PCA
 
 
-### scale and center data
+scale and center data
 ```{r}
 traits.stan <- standardize(traits.log, centerFun = mean, scaleFun = sd)
 
 ```
 
-# Run NMS (species in trait space)
+## Run NMS (species in trait space)
 
 metaMDS can't be run on negative values so shifting to the minimum value so that scores are not negative
 ```{r}
@@ -102,7 +105,7 @@ sampleScores$species <- rownames(sampleScores)
 sampleScores_abund <- merge(sampleScores, abund_sum)
 ```
 
-### Plot NMS
+## Plot NMS
 ```{r}
 #svg("figures/traitnms_scaled_by_abund.svg", height = 5.5, width = 8)
 
