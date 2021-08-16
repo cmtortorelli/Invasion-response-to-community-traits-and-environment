@@ -1,0 +1,617 @@
+---
+title: "Modeling VEDU response to trait metrics"
+author: "Claire Tortorelli"
+date: "September 4, 2020"
+output:
+  github_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+library(tidyverse)
+library(ggplot2)
+library(lme4)
+library(nlme)
+library(statmod)
+library(splines)
+library(cplm)
+library(stringr)
+library(multcomp)
+library(car)
+library(gridExtra)
+library(cowplot)
+library(here)
+```
+
+## Prep data
+### read in data
+
+Prep CWMs
+```{r}
+# trait x subplot dataframe
+df <- read.csv(here("data","Community_weighted_means.csv"))
+
+#remove ventenata from CWM x subplot df and put into separate df
+traitsdf <- df[1:105,]
+
+# vedu trait by subplot dataframe
+vdtraits <- df[106,]
+```
+
+Prep nearest species dataframes
+```{r}
+
+
+# nearest functional species to vedu distance values by subplot
+gapdf <- read.csv(here("data", "nearest_species_distances.csv"))
+
+#rename to have gap (nearest species gap distance to VEDU) in the name
+names(gapdf) <- c("plot_quad", "finerootV.totalrootV.gap", "height.gap", "N.perc.gap", "root.shoot.gap", "RootAvgDiam.mm.gap", "RootLength.cm.gap", "SLA.gap")
+```
+
+```{r}
+#biomass data - collected in 2020
+bio <- read.csv(here("data", "2020_biomass_by_subplot.csv"))
+#log tranform
+bio$logother20.bio <- log(bio$resident_g)
+
+```
+
+Merge dataframes
+```{r}
+
+traitsdfbio <- merge(traitsdf, bio)
+
+traitsdf <- merge(traitsdfbio, gapdf)
+
+```
+
+Clean up dataframes
+```{r}
+#order factors in order of productivity gradient
+traitsdf$vegtype <- factor(traitsdf$vegtype, levels = c("ARRI", "ARAR", "SEEP"))
+
+#remove influential outlier <- only species is 12% cover LONU
+traitsdf <- traitsdf[which(traitsdf$plot_quad != 'ARAR01_C.1'),]
+
+#convert plot and plot no to factors
+traitsdf$plot <- as.factor(traitsdf$plot)
+traitsdf$plotno <- as.factor(traitsdf$plotno)
+
+```
+
+## Model vedu_g response to community trait metrics
+
+### Resident biomass
+
+model ventenata resposne to resident biomass
+```{r}
+bio.bio <- lme(log(vedu_g) ~  logother20.bio*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+plot(bio.bio)
+```
+
+### Trait dissimilarity
+Calculate trait dissimilarity (community weighted trait value - VD trait value)
+```{r}
+#SLA
+traitsdf$SLA.dis <- abs(traitsdf$SLA - as.double(vdtraits$SLA))
+
+#root:shoot
+traitsdf$root.shoot.dis <- abs(traitsdf$root.shoot - as.double(vdtraits$root.shoot))
+
+#fine:total root V
+traitsdf$finerootV.totalrootV.dis <- abs(traitsdf$finerootV.totalrootV - as.double(vdtraits$finerootV.totalrootV))
+
+#height
+traitsdf$height.dis <- abs(traitsdf$height - as.double(vdtraits$height))
+
+#root L
+traitsdf$RootLength.cm.dis <- abs(traitsdf$RootLength.cm - as.double(vdtraits$RootLength.cm))
+
+#root D
+traitsdf$RootAvgDiam.mm.dis <- abs(traitsdf$RootAvgDiam.mm - as.double(vdtraits$RootAvgDiam.mm))
+
+#N perc
+traitsdf$N.perc.dis <- abs(traitsdf$N.perc - as.double(vdtraits$N.perc))
+
+```
+
+Model vedu response to trait dissimilarity (individually by trait)
+```{r}
+#model VEDU response to trait dissimilarity by trait
+
+#SLA
+dis.sla <- lme(log(vedu_g) ~  SLA.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#root:shoot
+dis.rs <- lme(log(vedu_g) ~  root.shoot.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#rootL
+dis.rl <- lme(log(vedu_g) ~ RootLength.cm.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#rootD
+dis.rd <- lme(log(vedu_g) ~  RootAvgDiam.mm.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#fine:total
+dis.fr <- lme(log(vedu_g) ~  finerootV.totalrootV.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#height
+dis.ht <- lme(log(vedu_g) ~  height.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+
+#N
+dis.n <- lme(log(vedu_g) ~ N.perc.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+```
+
+Check model fits & effect sizes
+```{r}
+dislist <- list(dis.fr, dis.ht, dis.n, dis.rl, dis.rs, dis.sla)
+#plot residuals
+lapply(dislist, plot) #residualss appear  normal
+#check for interaction effects
+lapply(dislist, Anova, type = 3)
+#examine effect sizes
+lapply(dislist, summary) 
+```
+
+
+
+### Hierarchical distance
+calculate hierarchical difference 
+```{r}
+#SLA
+traitsdf$SLA.dif <- (traitsdf$SLA - as.double(vdtraits$SLA))
+
+#root:shoot
+traitsdf$root.shoot.dif <- (traitsdf$root.shoot - as.double(vdtraits$root.shoot))
+
+#fine:total root V
+traitsdf$finerootV.totalrootV.dif <- (traitsdf$finerootV.totalrootV - as.double(vdtraits$finerootV.totalrootV))
+
+#height
+traitsdf$height.dif <- (traitsdf$height - as.double(vdtraits$height))
+
+#root L
+traitsdf$RootLength.cm.dif <- (traitsdf$RootLength.cm - as.double(vdtraits$RootLength.cm))
+
+#root D
+traitsdf$RootAvgDiam.mm.dif <- (traitsdf$RootAvgDiam.mm - as.double(vdtraits$RootAvgDiam.mm))
+
+#N
+traitsdf$N.perc.dif <- (traitsdf$N.perc - as.double(vdtraits$N.perc))
+```
+
+
+model vedu response to absolute trait difference individually
+```{r}
+#SLA
+dif.sla <- lme(log(vedu_g) ~  SLA.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#root:shoot
+dif.rs <- lme(log(vedu_g) ~  root.shoot.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#root L
+dif.rl <- lme(log(vedu_g) ~ RootLength.cm.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#root D
+dif.rd <- lme(log(vedu_g) ~  RootAvgDiam.mm.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#fine:total root V
+dif.fr <- lme(log(vedu_g) ~  finerootV.totalrootV.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#height
+dif.ht <- lme(log(vedu_g) ~  height.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+#N
+dif.n <- lme(log(vedu_g) ~  N.perc.dif*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+```
+
+Check model fits & effect sizes
+```{r}
+diflist <- list(dif.fr, dif.ht, dif.n, dif.rl, dif.rs, dif.sla)
+#plot residuals
+lapply(diflist, plot) #residualss appear  normal
+#check for interaction effects
+lapply(diflist, Anova, type = 3)
+#examine effect sizes
+lapply(diflist, summary) 
+```
+
+### Nearest species dissimilarity 
+
+Model VEDU response to difference in nearest functional species trait "gap" size 
+
+```{r}
+#model vedu response to trait gap separately
+
+gap.sla <- lme(log(vedu_g) ~  SLA.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.rs <- lme(log(vedu_g) ~  root.shoot.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.rl <- lme(log(vedu_g) ~ RootLength.cm.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.rd <- lme(log(vedu_g) ~  RootAvgDiam.mm.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.fr <- lme(log(vedu_g) ~  finerootV.totalrootV.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.ht <- lme(log(vedu_g) ~  height.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+gap.n <- lme(log(vedu_g) ~  N.perc.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
+
+```
+
+Check model fits & effect sizes
+```{r}
+gaplist <- list(gap.fr, gap.ht, gap.n, gap.rl, gap.rs, gap.sla)
+#plot residuals
+lapply(gaplist, plot) #residualss appear  normal
+#check for interaction effects
+lapply(gaplist, Anova, type = 3)
+#examine effect sizes
+lapply(gaplist, summary) 
+```
+
+
+## Comparing models
+
+Calculate partial R2 
+```{r}
+#get all models in a list
+mlist <- list(dif.sla, dif.rs, dif.rl, dif.rd, dif.fr,  dif.ht, dif.n,  dis.sla, dis.rs, dis.rl, dis.rd, dis.fr, dis.ht, dis.n, gap.sla, gap.rs, gap.rl, gap.rd, gap.fr,  gap.ht, gap.n, bio.bio)
+
+#name models in list
+modelnames <- c('dif.sla', 'dif.rs', 'dif.rl', 'dif.rd', 'dif.fr',  'dif.ht', 'dif.n',  'dis.sla', 'dis.rs', 'dis.rl', 'dis.rd', 'dis.fr', 'dis.ht', 'dis.n', 'gap.sla', 'gap.rs', 'gap.rl', 'gap.rd', 'gap.fr',  'gap.ht', 'gap.n', 'bio.bio')
+
+names(mlist) <- modelnames
+names(mlist) #check names
+```
+
+
+Extract estimates & CIs into df for each model by each vegetation type
+
+```{r}
+
+library(emmeans)
+#biomass
+embio <- data.frame(emtrends(bio.bio, ~ logother20.bio | vegtype, 
+                       var = "logother20.bio"))
+# heirarchical distance
+emdif.fr <- data.frame(emtrends(dif.fr, ~ finerootV.totalrootV.dif | vegtype, 
+                       var = "finerootV.totalrootV.dif"))
+emdif.sla <- data.frame(emtrends(dif.sla, ~ SLA.dif | vegtype, 
+                       var = "SLA.dif"))
+emdif.ht <- data.frame(emtrends(dif.ht, ~ height.dif | vegtype, 
+                       var = "height.dif"))
+emdif.rs <- data.frame(emtrends(dif.rs, ~ root.shoot.dif | vegtype, 
+                       var = "root.shoot.dif"))
+emdif.n <- data.frame(emtrends(dif.n, ~ N.perc.dif | vegtype, 
+                       var = "N.perc.dif"))
+emdif.rl <- data.frame(emtrends(dif.rl, ~ RootLength.cm.dif | vegtype, 
+                       var = "RootLength.cm.dif"))
+emdif.rd <- data.frame(emtrends(dif.rd, ~ RootAvgDiam.mm.dif | vegtype, 
+                       var = "RootAvgDiam.mm.dif"))
+
+#weighted mean dissimilarity
+emdis.fr <- data.frame(emtrends(dis.fr, ~ finerootV.totalrootV.dis | vegtype, 
+                       var = "finerootV.totalrootV.dis"))
+emdis.sla <- data.frame(emtrends(dis.sla, ~ SLA.dis | vegtype, 
+                       var = "SLA.dis"))
+emdis.ht <- data.frame(emtrends(dis.ht, ~ height.dis | vegtype, 
+                       var = "height.dis"))
+emdis.rs <- data.frame(emtrends(dis.rs, ~ root.shoot.dis | vegtype, 
+                       var = "root.shoot.dis"))
+emdis.n <- data.frame(emtrends(dis.n, ~ N.perc.dis | vegtype, 
+                       var = "N.perc.dis"))
+emdis.rl <- data.frame(emtrends(dis.rl, ~ RootLength.cm.dis | vegtype, 
+                       var = "RootLength.cm.dis"))
+emdis.rd <- data.frame(emtrends(dis.rd, ~ RootAvgDiam.mm.dis | vegtype, 
+                       var = "RootAvgDiam.mm.dis"))
+
+#nearest species dissimilarity
+
+emgap.fr <- data.frame(emtrends(gap.fr, ~ finerootV.totalrootV.gap | vegtype, 
+                       var = "finerootV.totalrootV.gap"))
+emgap.sla <- data.frame(emtrends(gap.sla, ~ SLA.gap | vegtype, 
+                       var = "SLA.gap"))
+emgap.ht <- data.frame(emtrends(gap.ht, ~ height.gap | vegtype, 
+                       var = "height.gap"))
+emgap.rs <- data.frame(emtrends(gap.rs, ~ root.shoot.gap | vegtype, 
+                       var = "root.shoot.gap"))
+emgap.n <- data.frame(emtrends(gap.n, ~ N.perc.gap | vegtype, 
+                       var = "N.perc.gap"))
+emgap.rl <- data.frame(emtrends(gap.rl, ~ RootLength.cm.gap | vegtype, 
+                       var = "RootLength.cm.gap"))
+emgap.rd <- data.frame(emtrends(gap.rd, ~ RootAvgDiam.mm.gap | vegtype, 
+                       var = "RootAvgDiam.mm.gap"))
+```
+
+export emtrends results (estimates by vegetation type)
+```{r}
+#combine all emtrends dfs into list
+emtrends_list_all <- list(embio, emdif.fr, emdif.sla, emdif.ht, emdif.rs, emdif.n, emdif.rl, emdif.rd, emdis.fr, emdis.sla, emdis.ht, emdis.rs, emdis.n, emdis.rl, emdis.rd, emgap.fr, emgap.sla, emgap.ht, emgap.rs, emgap.n, emgap.rl, emgap.rd)
+
+#merge df trends dfs after adding column that describes the variable being tested
+library(magrittr)
+em_trendslist2 <- emtrends_list_all %>%
+  map( ~ .x %>%
+         mutate(var_name = colnames(.x)[1]) %>%
+        set_colnames(c("var_value", "vegtype", "estimate", "SE", "df", "lower.CL", "upper.CL", "var_name")))
+
+#convert list to df
+em_trends_df <- do.call(rbind.data.frame, em_trendslist2)  
+
+#exponentiate respone
+em_trends_df$estimate.exp <- exp(em_trends_df$estimate)
+
+#write csv
+#write.csv(em_trends_df[,2:8], "trait_model_estimates_by_vegtype_with_emtrends.csv", row.names =  F)
+```
+
+
+Calculate R2 and AIC for all models
+```{r}
+library(MuMIn)
+library(r2glmm)
+library(qpcR)
+
+#function to calculate r2 using Nakagawa and Schielzeth method
+r2 <- function(model){
+  r2beta(model, method = 'nsj')[1,6]
+}
+
+
+#apply r2 to each model in the model list to extract r2s
+# r2 measures how much variation in the data is explained by the model
+r2list <- data.frame(unlist(lapply(X = mlist, FUN = r2)))
+colnames(r2list) <- "r2" 
+
+#calculate AIC for each model in list
+# AIC measures how well the model will fit new data
+AIClist <- data.frame(unlist(lapply(mlist, AIC)))
+colnames(AIClist) <- "AIC"
+
+#calculate AICc for each model in list
+AICclist <- data.frame(unlist(lapply(mlist, AICc)))
+colnames(AICclist) <- "AICc"
+
+#calculate AICc model weights
+aiccweights <- data.frame(round(Weights(AICclist),6))
+colnames(aiccweights) <- "AICcweights"
+
+#combine r2, AIC, AICc and AICc weights dfs
+modcomp <- cbind(r2list,AIClist,AICclist,aiccweights)
+
+#label models
+modcomp$mod <- modelnames
+modcomp$modcat <- str_sub(modcomp$mod, 1,3)
+
+#get weighted average r2, mean r2, and mean AICc
+modcomp2 <- modcomp %>%
+   group_by(modcat) %>%
+   mutate(weighted_r2 = weighted.mean(r2, AICcweights),
+          mean_r2 = mean(r2),
+          average_AICc = mean(AICc))
+
+#calculate delta AICc
+modcomp2$deltaAICc <- modcomp2$AICc - min(modcomp2$AICc)
+
+#write AIC table for 2020 data
+#write.csv(modcomp2, "2020AIC_model_trait_table.csv")
+
+```
+
+Calculate ANOVA for all models & create new df
+```{r}
+library(data.table)
+library(purrr)
+
+#write a function to get anova from model and convert the row name to the first col
+getanova <- function (x) {
+  setDT(data.frame(Anova(x, type = 3))[4,], keep.rownames = TRUE)[]
+}
+
+
+#apply function to all models and bind to a new df
+anovadf <- map_df(mlist, getanova, .id = "model")
+
+#write.csv(anovadf, "2020AnovaTable.csv")
+
+```
+
+## Plot models
+
+Create a function that pulls predicted values and upper and lower confidence intervals for each model
+```{r}
+#function takes fitted model and empty dataframe
+plotlme <- function(fitlme, newdat){
+  newdat.lme = newdat
+  mod <- deparse(substitute(fitlme))
+
+  preds <- data.frame(prediction=predict(fitlme, 
+            newdata = newdat.lme, level = 0))
+  
+  des = model.matrix(formula(fitlme)[-2], newdat.lme)
+  predvar = diag( des %*% vcov(fitlme) %*% t(des) )
+  #calculates confidence intervals
+  preds$lower = preds$prediction - 2*sqrt(predvar)
+  preds$upper = preds$prediction + 2*sqrt(predvar)
+
+  #change col names to reflect predictor
+  # colnames(preds) <- c(paste(mod,"predlme"),paste(mod,"lower"), paste(mod, "upper"))
+  return(preds)
+  
+}
+
+
+```
+
+loop through models and create a long dataframe that combines predicted values, upper, and lower confidence intervals for each model
+```{r}
+#create empty df
+predicted.df <- data.frame(NULL)
+
+#loop through model list and apply plot lme function
+for(i in 1:length(mlist)){
+  mod <- modelnames[i]
+  tempdf <- plotlme(mlist[[i]], traitsdf)
+  tempdf$model <- mod
+
+  #append trait values to predictions
+  traitvar <-  as.character(mlist[[i]]$terms[[3]])[2] #get name of predictor from model
+  tempdf$traitvar <- traitsdf[,which(names(traitsdf) == traitvar)]
+  
+  predicted.df <- rbind(predicted.df, tempdf)
+  
+}
+
+
+
+```
+
+Prep dataframe for plotting
+```{r}
+#create dataframe to plot with corrected confidence intervals for lme
+
+#pull out plot_quad, vegtype, & VD2020 biomass
+traitsdf.rep <- traitsdf[,c(1,11,19)]
+#repeat df to match length of predicted values df
+traitsdf.rep <- as.data.frame(apply(traitsdf.rep, MARGIN = 2, rep, length(mlist)))
+
+#bind repeated traits df to predicted df
+traitsdf.to.plot.lme <- cbind(traitsdf.rep, predicted.df)
+
+#extract model category (hypothesis) from first 3 characters of the model name
+traitsdf.to.plot.lme$modcat <- substr(traitsdf.to.plot.lme$model, 0, 3)
+#extract trait name  from last 3 characters of the model name
+traitsdf.to.plot.lme$trait <- substr(traitsdf.to.plot.lme$model, 5, 8)
+
+#convert biomass to numeric
+traitsdf.to.plot.lme$vedu_g <- as.numeric(as.character(traitsdf.to.plot.lme$vedu_g))
+
+#convert to factor & change factor names from data-collection codes
+traitsdf.to.plot.lme$vegtype <- factor(traitsdf.to.plot.lme$vegtype, levels = c("ARRI", "ARAR", "SEEP"), labels = c("scab-flat", "low sage-steppe", "wet meadow"))
+
+#change factor names from data-collection codes
+traitsdf.to.plot.lme$trait <- factor(traitsdf.to.plot.lme$trait, levels = c("ht", "n", "sla", "rs", "fr", "rd", "rl", "bio"), labels = c("height", "leaf N",  "SLA", "R:S",  "F:T RootV", "root D", "root L", "biomass" ))
+
+#change factor names from data-collection codes
+traitsdf.to.plot.lme$modcat <- factor(traitsdf.to.plot.lme$modcat, levels = c("dis", "gap",  "dif", "bio"), labels = c( "weighted.mean", "nearest.species", "hierarchical.distance", "biomass" ))
+```
+
+
+Plot hierarchical distance, weighted mean dissimilarity, and nearest species dissimilarity
+```{r}
+library(ggtext)
+#set pallette
+pal <- c("#A6761D", "#E6AB02" , "#666666")
+
+# extract traits to plot
+traitsonly.to.plot.lme <- traitsdf.to.plot.lme[which(traitsdf.to.plot.lme$modcat == "weighted.mean" | traitsdf.to.plot.lme$modcat == "nearest.species" | traitsdf.to.plot.lme$modcat == "hierarchical.distance"),]
+
+
+# Make labels for x strips (columns)
+col_labels <- c('weighted.mean' = "weighted mean<br>
+                dissimilarity:",
+                'nearest.species' = "nearest species<br>
+                dissimilarity:",
+                'hierarchical.distance' ="hierarchical<br>
+                distance:")
+
+
+(p2020traitsonly <- ggplot(traitsonly.to.plot.lme, 
+          aes(x = traitvar, y = log(vedu_g),
+          color = vegtype, group = vegtype) ) + #select variables
+    geom_ribbon( aes(ymin = lower, ymax = upper, fill = vegtype, color = NULL),
+          alpha = .15) + #assign ribbon values
+    geom_line( aes(y = prediction), size = 1)+ 
+    theme_bw( base_size = 12) +
+    theme(panel.grid.major = element_blank(), #remove gridlines
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          panel.border = element_rect(colour = "black"),
+          strip.text.x = element_markdown(),
+          legend.title=element_blank())+
+    scale_fill_manual(values = pal) + #change values based on palette
+    scale_color_manual(values = pal) +
+    geom_vline(xintercept = 0, linetype="dotted")+ #add dotted line at 0
+    scale_y_continuous(limits = c(-1.5,3.2), breaks = c(-1,0,1,2))+
+    guides(color=guide_legend(override.aes=list(fill=NA))) +
+    facet_grid(trait ~ modcat, scales = "free", 
+          labeller = labeller(.cols = col_labels) ) + #facet on traits and model category
+    ylab(expression(paste("log (",italic("V. dubia")~" biomass)"))) +
+    xlab("standardized trait value"))
+#labeller = labeller(modcat = new_labels
+
+#ggsave('p2020traitonly.svg')
+
+```
+
+
+Plot VEDU relationship to biomass
+```{r}
+#select biomass for plotting
+biomass.to.plot.lme <- traitsdf.to.plot.lme[which(traitsdf.to.plot.lme$modcat == "biomass"),]
+col_labels  <- c('biomass' = "biomass:")
+
+#create plot in ggplot
+(p2020biomass <- ggplot(biomass.to.plot.lme, aes(x = traitvar, y =
+          log(vedu_g),
+          color = vegtype, group = vegtype) ) +
+    geom_ribbon( aes(ymin = lower, ymax = upper, fill = vegtype, color = NULL),
+          alpha = .15) +
+    geom_line( aes(y = prediction), size = 1)+
+    theme_bw( base_size = 12) +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          panel.border = element_rect(colour = "black"),
+          strip.text.x = element_markdown(),
+          legend.title=element_blank())+
+    scale_fill_manual(values = pal) +
+    scale_color_manual(values = pal) +
+    scale_y_continuous(limits = c(-1.5,3.2), breaks = c(-1,0,1,2))+
+    guides(color=guide_legend(override.aes=list(fill=NA))) +
+    facet_grid(trait ~ modcat, scales = "free", 
+          labeller = labeller(.cols = col_labels) ) +
+    theme(legend.position = "none")+ #remove legend
+    ylab(expression(paste("log (",italic("V. dubia"),"biomass)"))) +
+    xlab("log (resident biomass)"))
+
+
+
+```
+
+
+Combine plots
+```{r}
+library(ggpubr)
+
+# assign legend
+legend <- get_legend(p2020traitsonly +
+          theme(legend.text=element_text(size=12)))
+
+#remove legend from traits plot
+p2020traitonly2 <- p2020traitsonly + theme(legend.position="none")
+
+
+(all2020plot <- grid.arrange(p2020traitonly2, 
+                      widths=c(4.5, 2), 
+                      heights = c(25),
+                      arrangeGrob(p2020biomass + ylab(""), 
+                      legend, 
+                      ncol = 1, nrow = 2, 
+                      heights = c(5,15))))
+
+#ggsave("figures/all2020plot.svg", all2020plot, height = 8, width = 7.5)
+
+```
