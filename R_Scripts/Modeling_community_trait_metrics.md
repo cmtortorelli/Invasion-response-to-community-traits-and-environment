@@ -1,39 +1,39 @@
-Modeling VEDU response to trait metrics
+Modeling ventenata response to trait metrics
 ================
 Claire Tortorelli
 September 4, 2020
 
 ## Prep data
 
-### read in data
+read in data
 
-Prep CWMs
+Prep CWM dataframe
 
 ``` r
 # trait x subplot dataframe
 df <- read.csv(here("data","Community_weighted_means.csv"))
 
-#remove ventenata from CWM x subplot df and put into separate df
+#remove ventenata from CWM x subplot dataframe and put into separate dataframe
 traitsdf <- df[1:105,]
 
-# vedu trait by subplot dataframe
+# ventenata trait by subplot dataframe
 vdtraits <- df[106,]
 ```
 
-Prep nearest species dataframes
+Prep nearest species dataframe
 
 ``` r
-# nearest functional species to vedu distance values by subplot
+# nearest functional species to ventenata distance values by subplot
 gapdf <- read.csv(here("data", "nearest_species_distances.csv"))
 
-#rename to have gap (nearest species gap distance to VEDU) in the name
+#rename to have gap (nearest species trait distance ("gap") to ventenata's distance) in the name
 names(gapdf) <- c("plot_quad", "finerootV.totalrootV.gap", "height.gap", "N.perc.gap", "root.shoot.gap", "RootAvgDiam.mm.gap", "RootLength.cm.gap", "SLA.gap")
 ```
 
 ``` r
 #biomass data - collected in 2020
 bio <- read.csv(here("data", "2020_biomass_by_subplot.csv"))
-#log tranform
+#log transform to improve normality
 bio$logother20.bio <- log(bio$resident_g)
 ```
 
@@ -45,16 +45,16 @@ traitsdfbio <- merge(traitsdf, bio)
 traitsdf <- merge(traitsdfbio, gapdf)
 ```
 
-Clean up dataframes
+Organize dataframe for analysis
 
 ``` r
 #order factors in order of productivity gradient
 traitsdf$vegtype <- factor(traitsdf$vegtype, levels = c("ARRI", "ARAR", "SEEP"))
 
-#remove influential outlier <- only species is 12% cover LONU
+#remove outlier that falls outside of the communities type we were aiming to capture (not representative of a low sage-steppe (ARAR) site) <- only species is 12% cover LONU
 traitsdf <- traitsdf[which(traitsdf$plot_quad != 'ARAR01_C.1'),]
 
-#convert plot and plot no to factors
+#convert plot and plot_no to factors
 traitsdf$plot <- as.factor(traitsdf$plot)
 traitsdf$plotno <- as.factor(traitsdf$plotno)
 ```
@@ -63,7 +63,7 @@ traitsdf$plotno <- as.factor(traitsdf$plotno)
 
 ### Resident biomass
 
-model ventenata resposne to resident biomass
+model ventenata response to resident biomass
 
 ``` r
 bio.bio <- lme(log(vedu_g) ~  logother20.bio*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
@@ -73,8 +73,8 @@ plot(bio.bio)
 
 ### Trait dissimilarity
 
-Calculate trait dissimilarity (community weighted trait value - VD trait
-value)
+Calculate trait dissimilarity (community weighted trait value -
+ventenata trait value)
 
 ``` r
 #SLA
@@ -99,10 +99,15 @@ traitsdf$RootAvgDiam.mm.dis <- abs(traitsdf$RootAvgDiam.mm - as.double(vdtraits$
 traitsdf$N.perc.dis <- abs(traitsdf$N.perc - as.double(vdtraits$N.perc))
 ```
 
-Model vedu response to trait dissimilarity (individually by trait)
+Model ventenata response to trait dissimilarity (individually by trait)
+
+We chose to model traits individually to maintain interpretability
+(instead of collapsing axes in a PCA) and maintain reasonable degrees of
+freedom with our interaction term (rather than combining all traits into
+one model)
 
 ``` r
-#model VEDU response to trait dissimilarity by trait
+#model ventenata response to trait dissimilarity by trait
 
 #SLA
 dis.sla <- lme(log(vedu_g) ~  SLA.dis*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
@@ -171,7 +176,7 @@ traitsdf$RootAvgDiam.mm.dif <- (traitsdf$RootAvgDiam.mm - as.double(vdtraits$Roo
 traitsdf$N.perc.dif <- (traitsdf$N.perc - as.double(vdtraits$N.perc))
 ```
 
-model vedu response to absolute trait difference individually
+model ventenata response to absolute trait difference individually
 
 ``` r
 #SLA
@@ -210,11 +215,11 @@ lapply(diflist, summary)
 
 ### Nearest species dissimilarity
 
-Model VEDU response to difference in nearest functional species trait
-“gap” size
+Model ventenata response to difference in nearest functional species
+trait “gap” size
 
 ``` r
-#model vedu response to trait gap separately
+#model ventenata response to trait gap separately
 
 gap.sla <- lme(log(vedu_g) ~  SLA.gap*vegtype, random = ~ 1|plotno/plot, data = traitsdf)
 
@@ -245,7 +250,7 @@ lapply(gaplist, summary)
 
 ## Comparing models
 
-Calculate partial R2
+Calculate partial R2 for each model
 
 ``` r
 #get all models in a list
@@ -258,7 +263,8 @@ names(mlist) <- modelnames
 names(mlist) #check names
 ```
 
-Extract estimates & CIs into df for each model by each vegetation type
+Extract estimates & CIs into dataframe for each model by each vegetation
+type
 
 ``` r
 library(emmeans)
@@ -321,7 +327,7 @@ export emtrends results (estimates by vegetation type)
 #combine all emtrends dfs into list
 emtrends_list_all <- list(embio, emdif.fr, emdif.sla, emdif.ht, emdif.rs, emdif.n, emdif.rl, emdif.rd, emdis.fr, emdis.sla, emdis.ht, emdis.rs, emdis.n, emdis.rl, emdis.rd, emgap.fr, emgap.sla, emgap.ht, emgap.rs, emgap.n, emgap.rl, emgap.rd)
 
-#merge df trends dfs after adding column that describes the variable being tested
+#merge dataframe trends dfs after adding column that describes the variable being tested
 library(magrittr)
 em_trendslist2 <- emtrends_list_all %>%
   map( ~ .x %>%
@@ -331,7 +337,7 @@ em_trendslist2 <- emtrends_list_all %>%
 #convert list to df
 em_trends_df <- do.call(rbind.data.frame, em_trendslist2)  
 
-#exponentiate respone
+#exponentiate response
 em_trends_df$estimate.exp <- exp(em_trends_df$estimate)
 
 #write csv
@@ -390,19 +396,19 @@ modcomp2$deltaAICc <- modcomp2$AICc - min(modcomp2$AICc)
 #write.csv(modcomp2, "2020AIC_model_trait_table.csv")
 ```
 
-Calculate ANOVA for all models & create new df
+Perform ANOVA for all models & create new dataframe
 
 ``` r
 library(data.table)
 library(purrr)
 
-#write a function to get anova from model and convert the row name to the first col
+#write a function to get anova from model and convert the row name to the first column
 getanova <- function (x) {
   setDT(data.frame(Anova(x, type = 3))[4,], keep.rownames = TRUE)[]
 }
 
 
-#apply function to all models and bind to a new df
+#apply function to all models and bind to a new dataframe
 anovadf <- map_df(mlist, getanova, .id = "model")
 
 #write.csv(anovadf, "2020AnovaTable.csv")
@@ -428,7 +434,7 @@ plotlme <- function(fitlme, newdat){
   preds$lower = preds$prediction - 2*sqrt(predvar)
   preds$upper = preds$prediction + 2*sqrt(predvar)
 
-  #change col names to reflect predictor
+  #change column  names to reflect predictor
   # colnames(preds) <- c(paste(mod,"predlme"),paste(mod,"lower"), paste(mod, "upper"))
   return(preds)
   
@@ -464,10 +470,10 @@ Prep dataframe for plotting
 
 #pull out plot_quad, vegtype, & VD2020 biomass
 traitsdf.rep <- traitsdf[,c(1,11,19)]
-#repeat df to match length of predicted values df
+#repeat dataframe to match length of predicted values df
 traitsdf.rep <- as.data.frame(apply(traitsdf.rep, MARGIN = 2, rep, length(mlist)))
 
-#bind repeated traits df to predicted df
+#bind repeated traits dataframe to predicted df
 traitsdf.to.plot.lme <- cbind(traitsdf.rep, predicted.df)
 
 #extract model category (hypothesis) from first 3 characters of the model name
@@ -500,7 +506,7 @@ pal <- c("#A6761D", "#E6AB02" , "#666666")
 traitsonly.to.plot.lme <- traitsdf.to.plot.lme[which(traitsdf.to.plot.lme$modcat == "weighted.mean" | traitsdf.to.plot.lme$modcat == "nearest.species" | traitsdf.to.plot.lme$modcat == "hierarchical.distance"),]
 
 
-# Make labels for x strips (columns)
+# Make labels for columns
 col_labels <- c('weighted.mean' = "weighted mean<br>
                 dissimilarity:",
                 'nearest.species' = "nearest species<br>
@@ -531,12 +537,12 @@ col_labels <- c('weighted.mean' = "weighted mean<br>
           labeller = labeller(.cols = col_labels) ) + #facet on traits and model category
     ylab(expression(paste("log (",italic("V. dubia")~" biomass)"))) +
     xlab("standardized trait value"))
-#labeller = labeller(modcat = new_labels
+
 
 #ggsave('p2020traitonly.svg')
 ```
 
-Plot VEDU relationship to biomass
+Plot ventenata relationship to biomass
 
 ``` r
 #select biomass for plotting

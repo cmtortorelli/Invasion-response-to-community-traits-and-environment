@@ -27,7 +27,7 @@ traits <- read.csv(here("data","allTraits_averagedBySpecies_USDAcodes.csv"))
 ```
 
 
-Log transform trait values
+Log transform trait values to improve normality
 ```{r}
 #set plot ID to rownames
 traits <- column_to_rownames(traits, var = "species") 
@@ -84,7 +84,7 @@ plot_sp.wo.vd <- plot_sp[ , !names(plot_sp) %in% c('VEDU')]
 
 ```
 
-weight trait matrix by species abundance
+Weight trait matrix by  species relative abundance
 
 multiply plot-species and species- traits matrices
 ```{r}
@@ -97,18 +97,18 @@ plot.sp.traitmatrix <- data.matrix(plot_sp.wo.vd) %*% data.matrix(traits.log.wo.
 
 ```
 
-divide weighted sum (plot.sp.trait matrix) by total veg cover (without vd)
+Divide weighted sum (plot.sp.trait matrix) by total veg cover (without vedu)
 ```{r}
-#create a new df to add a total veg cover col to
+#create a new dataframe to add total veg cover 
 plot_sp.wo.vd.totalveg <- plot_sp.wo.vd
 
-#sum rows to get a total veg cover col
+#sum rows to get total veg cover
 plot_sp.wo.vd.totalveg$totalveg <- rowSums(plot_sp.wo.vd)
 
-#extract the total veg col to a new df
+#extract total veg to a new dataframe
 totalveg <- data.frame(plot_sp.wo.vd.totalveg[ , names(plot_sp.wo.vd.totalveg) %in% c('totalveg')])
 
-#rename col to totalveg
+#rename totalveg
 colnames(totalveg) <- "totalveg"
 
 #divide trait matrix by total veg
@@ -142,7 +142,7 @@ vedu.trait.stan <- data.frame(plot.sp.traitmatrix.tveg.vd.stan[151,])
 
 Clean up dataframe for modeling
 ```{r}
-#assign rownames to col 1
+#assign rownames
 traitdf <- as.data.frame(setDT(as.data.frame(plot.sp.traitmatrix.tveg.stan.wovd), keep.rownames = TRUE)[])
 names(traitdf)[names(traitdf) == "rn"] <- "plot_quad"
 

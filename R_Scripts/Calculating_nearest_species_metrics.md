@@ -12,8 +12,7 @@ Read in trait data
 traits <- read_csv(here("data", "allTraits_averagedBySpecies_USDAcodes.csv"))
 ```
 
-standardize the trait matrix "log- transform and standardized using the
-formula
+standardize the trait matrix "log- transform and standardized
 
 ``` r
 #set species to row names to standardize
@@ -27,7 +26,8 @@ traits.log <- log(traits)
 traits.stan <- standardize(traits.log, centerFun = mean, scaleFun = sd)
 ```
 
-remove vedu from traits matrix and create vd only traits matrix
+remove vedu (“ventenata”) from traits matrix and create vedu only traits
+matrix
 
 ``` r
 #remove vedu from traits matrix
@@ -48,14 +48,14 @@ read in species plot data
 plot_sp <- read_csv(here("data","2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
 ```
 
-Remove rare species (not included in trait matrix) and VEDU from
+Remove rare species (not included in trait matrix) and vedu from
 community matrix
 
 ``` r
 #set plot ID to rownames
 plot_sp <- column_to_rownames(plot_sp, "plot_quad")
 
-# Keep only species included in trait matrix - remove rare species that occurred in fewer than 4 plots
+# Keep only species included in trait matrix - remove rare species that occurred in fewer than 3 subplots
 species4anal <- rownames(traits.log)
 plot_sp <- plot_sp[ , names(plot_sp) %in% species4anal]
 
@@ -64,7 +64,7 @@ plot_sp.wo.vd <- plot_sp[,-c(36)]
 #write.csv(plot_sp.wo.vd, "plot_sp.wo.vd.csv")
 ```
 
-Convert to long format for calculating difference betweeen VEDU trait
+Convert to long format for calculating difference between VEDU trait
 values and other species present in the community trait values
 
 ``` r
@@ -161,8 +161,8 @@ for (i in 1:dim(gap.traits.wvd)[1]){ #1 indicates rows, 2 indicates cols
 gap.traits.wide <- spread(gap.traits.wvd[,c(1,2,6)], trait, gap)
 ```
 
-Write plot\_gap df (log, standardized, and scaled prior to gap
-calculation)
+Write plot\_gap dataframe (log, standardized, and scaled prior to
+nearest species distance (“gap”) calculation)
 
 ``` r
 #write.csv(gap.traits.wide, "nearest_species_distances.csv", row.names = F)
