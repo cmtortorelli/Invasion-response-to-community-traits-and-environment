@@ -6,6 +6,9 @@ output:
   github_document
 ---
 
+Calculate nearest species dissimilarity for each subplot following Catford et al. 2019
+
+
 ```{r setup, include=FALSE}
 
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE)

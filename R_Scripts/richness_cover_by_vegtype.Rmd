@@ -5,6 +5,9 @@ date: "10/21/2021"
 output: html_document
 ---
 
+Compare species richness, cover, and biomass by vegetation type (wet meadows, low-sage steppe, scab-flat)
+
+
 ```{r setup, include=FALSE}
 
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE)

@@ -1,10 +1,13 @@
 ---
-title: "Creating plot x trait weighted average dataframe"
+title: "Calculating community weighted means"
 author: "Claire Tortorelli"
 date: "September 3, 2020"
 output:
   github_document
 ---
+
+
+Calculating community weighted means (CWMs) for each trait and every subplot 
 
 ```{r setup, include=FALSE}
 

@@ -6,6 +6,9 @@ output:
   github_document
 ---
 
+
+Examining subplots and vegtypes in CWM trait space using NMS
+
 ```{r setup, include=FALSE}
 
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE)

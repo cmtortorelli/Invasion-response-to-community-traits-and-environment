@@ -6,6 +6,10 @@ output:
   github_document
 ---
 
+
+
+Examining natural ventenata recruitment after ventenata removal in subplots compared to seeded subplots 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 
