@@ -1,0 +1,220 @@
+---
+title: "9_3_19_SGH_preliminary_cover"
+author: "Claire Tortorelli"
+date: "September 3, 2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+library(tidyverse)
+library(multcomp)
+library(car)
+library(data.table)
+library(here)
+library(sjPlot)
+library(MuMIn)
+library(vegan)
+library(nlme)
+library(emmeans)
+```
+
+read in CWM trait data
+```{r data}
+cwm <- read.csv(here("data","Community_weighted_means.csv"))
+bio <- read_csv(here("data", "2020_biomass_by_subplot.csv"))
+```
+
+# Calculate dissimilarity matrix
+
+
+
+Compute different distance matrixes for all quads with ventenata only "subplot"
+
+Correlation coefficient from McCune & Grace pg. 47 (ranges from 0 - 1: 0 = completely similar; 1 = completely dissimilar)
+```{r}
+
+#convert cmw traits to matrix
+cwmSub <- cwm[,1:8]
+row.names(cwmSub) <- cwmSub$plot_quad
+cwmSub$plot_quad <- NULL
+
+#The cosine of the angle between two vectors is equal to the dot product of this vectors divided by the product of vector magnitude.
+#this is standardized by (1-r)/2
+get.correlation.coef.mccune <- function(a,b) {
+  (1 - (a %*% b/(sqrt(sum(a^2))*sqrt(sum(b^2)))))/2
+}
+
+
+cor.plot.trait.dist <- as.data.frame(as.matrix(cwmSub)[,1])
+
+for (i in 1:nrow(cwmSub)){
+  cor.plot.trait.dist[i,] =
+    get.correlation.coef.mccune(as.matrix(cwmSub)[i,],as.matrix(cwmSub)[106,])
+}
+
+```
+
+Euclidean distance
+```{r}
+
+#euclidean: Usual square distance between the two vectors (2 norm).
+euc.plot.trait.dist <- as.matrix(vegdist(cwmSub, method = "euclidean"))[-106,106]
+
+#merge distance matrices and remove vedu row with dissimilarity value = 0
+dist.matrix.vd.plot <- as.data.frame(cbind(as.matrix(cor.plot.trait.dist)[-106,],euc.plot.trait.dist))
+
+
+#*low values are most similar 
+```
+
+
+# Model ventenata response to community dissimilarity 
+
+prep df for analysis
+```{r}
+library(data.table)
+#assign row names to column 1 and convert to df
+dist.df.vd.plot <- as.data.frame(setDT(as.data.frame(dist.matrix.vd.plot), keep.rownames = TRUE)[])
+colnames(dist.df.vd.plot) <- c("plot_quad", "cor.plot.trait.dist", "euc.plot.trait.dist") #and rename columns
+
+#merge vd and trait dfs
+vd.trait.df <- merge(dist.df.vd.plot, bio)
+
+#create cols for Vegtype, Plot, and Plot_no
+vd.trait.df$vegtype <- substr(vd.trait.df$plot_quad, 1, 4)
+vd.trait.df$plot <- substr(vd.trait.df$plot_quad, 1, 6)
+vd.trait.df$plotno <- substr(vd.trait.df$plot_quad, 5, 6)
+
+#reorder vegtype factor
+vd.trait.df$vegtype <- factor(vd.trait.df$vegtype, levels = c("ARRI", "ARAR" , "SEEP"))
+
+```
+
+Corrleation model
+```{r}
+#--------------correlation
+
+corcov <- lme(log(vedu_g) ~ cor.plot.trait.dist*vegtype, random = ~ 1|plotno/plot, data = vd.trait.df)
+
+#check residuals
+plot(corcov)
+summary(corcov)
+
+plot_model(corcov)
+plot_model(corcov, type = "pred")
+```
+
+
+Euclidean model
+```{r}
+#--------euclidean distance
+euccov <- lme(log(vedu_g) ~ euc.plot.trait.dist*vegtype, random = ~ 1|plotno/plot, data = vd.trait.df)
+
+#check residuals
+plot(euccov) #look good
+
+summary(euccov)
+
+#AICc
+AICc(euccov)
+
+#plot the response
+plot_model(euccov)
+plot_model(euccov, type = "pred")
+
+
+emveg <- data.frame(emtrends(euccov, ~ euc.plot.trait.dist | vegtype, 
+                       var = "euc.plot.trait.dist"))
+
+#calcualte R2
+library(MuMIn)
+library(r2glmm)
+
+#calculate r2 using Nakagawa and Schielzeth method
+r2beta(euccov, method = 'nsj')[1,6]
+
+```
+
+
+
+
+### Plot
+
+Plot model and 95% CI from https://aosmith.rbind.io/2018/11/16/plot-fitted-lines/#confidence-intervals-for-lme-objects
+```{r}
+#create new df
+newdat.lme = data.frame(vegtype = vd.trait.df$vegtype,
+                        vedu_g = vd.trait.df$vedu_g,
+                        euc.plot.trait.dist = vd.trait.df$euc.plot.trait.dist)
+
+#add predicted
+newdat.lme$predlme <- predict(euccov, newdata = newdat.lme, level = 0)
+
+
+#get confidence intervals for predictions
+des = model.matrix(formula(euccov)[-2], newdat.lme)
+predvar = diag( des %*% vcov(euccov) %*% t(des) )
+newdat.lme$lower = with(newdat.lme, predlme - 2*sqrt(predvar) )
+newdat.lme$upper = with(newdat.lme, predlme + 2*sqrt(predvar) )
+
+#rename vegtype
+newdat.lme$vegtype <- factor(newdat.lme$vegtype, labels = c("ARRI"="scab-flat", "ARAR"="low sage-steppe", "SEEP" = "wet meadow"))
+```
+
+```{r}
+pal <- c("#A6761D", "#E6AB02" , "#666666")
+
+(pEuc <- ggplot(newdat.lme, aes(x = euc.plot.trait.dist, y = log(vedu_g), color = vegtype) ) +
+    geom_ribbon( aes(ymin = lower, ymax = upper, fill = vegtype, color = NULL),
+          alpha = .15) + #assign ribbon values
+      geom_line(aes(y = predlme), size = 1.5)+ 
+    theme_bw( base_size = 12) +
+    theme(panel.grid.major = element_blank(), #remove gridlines
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          panel.border = element_rect(colour = "black"),
+          legend.title=element_blank(),
+          legend.position = c(.23,.82))+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)+
+  ylab(expression(paste("log (",italic("V. dubia")," biomass)"))) +
+    xlab("Euclidean distance"))
+```
+Save plot
+```{r}
+library(svglite)
+#ggsave("eucDist.svg", pEuc, width = 4, height = 4)
+```
+
+# plot Euclidean distances
+```{r}
+#rename vegtype
+vd.trait.df$vegtype <- factor(vd.trait.df$vegtype, labels = c("ARRI"="scab-flat", "ARAR"="low sage-steppe", "SEEP" = "wet meadow"))
+
+ggplot(data = vd.trait.df, aes(x = vegtype, y = euc.plot.trait.dist, color = vegtype)) +
+         geom_boxplot() +
+         geom_point(size = 2, alpha = .5) +
+             theme_bw( base_size = 12) +
+    theme(panel.grid.major = element_blank(), #remove gridlines
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          panel.border = element_rect(colour = "black"),
+          legend.title=element_blank(),
+          legend.position = "none")+
+  scale_color_manual(values = pal)+
+  ylab("Euclidean distance") +
+    xlab("")
+
+
+```
+
+
+
+
+

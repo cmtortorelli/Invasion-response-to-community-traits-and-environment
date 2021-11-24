@@ -63,12 +63,18 @@ VDtraits <- traits.log[36,]
 
 ## Calculate matrix of traits weighted by relative abundance in sublots
 
+read in species data 
+```{r}
+#read in plot_species data (plot x species)
+plot_sp <- read_csv(here("data", "2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
+
+
+```
+
 Prep matrices for multiplication
 
 Species x Plot matrix prep
 ```{r}
-#read in plot_species data (plot x species)
-plot_sp <- read_csv(here("data", "2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
 
 #set plot ID to rownames
 plot_sp <- column_to_rownames(plot_sp, var = "plot_quad") 

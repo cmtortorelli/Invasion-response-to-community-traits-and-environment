@@ -1,0 +1,173 @@
+---
+title: "cover and richness by vegtype"
+author: "Claire Tortorelli"
+date: "10/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+library(tidyverse)
+library(multcomp)
+library(car)
+library(data.table)
+library(here)
+```
+
+read in species plot data
+```{r}
+#read in plot_species data (plot x species)
+plot_sp <- read_csv(here("data", "2020_USDAspeciesCover_4traits_seededCommunitySubplots.csv"))
+# biomass data
+bio <- read_csv(here("data", "2020_biomass_by_subplot.csv"))
+```
+
+
+### Species richness by vegtype
+```{r}
+
+#calculate species richness per subplot
+
+plot_sp$div <- rowSums(plot_sp[,2:40] !=0)
+plot_sp$veg <- factor(substr(plot_sp$plot_quad,1,4), levels = c('ARRI', 'ARAR', 'SEEP'))
+
+
+(species_richness <- plot_sp %>% group_by(veg) %>%
+  summarize(mean = mean(div),
+             max = max(div),
+             min = min(div)))
+
+```
+
+
+### Cover by vegtype 
+```{r}
+plot_spnovd <- plot_sp[,-39]
+
+plot_spnovd$tcover <- rowSums(plot_spnovd[,2:39])
+
+plot(plot_spnovd$tcover ~ plot_spnovd$veg)
+
+#average cover
+(cover <- plot_spnovd %>% group_by(veg) %>%
+  summarize(mean = mean(tcover),
+             max = max(tcover),
+             min = min(tcover)))
+```
+
+
+model ventenata cover response to vegtype
+```{r}
+library(glmmTMB)
+library(DHARMa)
+plot_spnovd$plotno <- as.factor(substr(plot_spnovd$plot_quad,5,6))
+plot_spnovd$Plot <- as.factor(substr(plot_spnovd$plot_quad,1,6))
+
+#model with tweedie distribution because cover data has high proportion of zeros
+mcov <- glmmTMB(tcover ~ veg + (1|plotno/Plot), family = tweedie, data = plot_spnovd)
+
+plot(simulateResiduals(mcov)) #nice fit
+
+summary(mcov)
+
+```
+
+Compare means with emmeans
+```{r}
+library(emmeans)
+(em <- emmeans(mcov, specs = revpairwise ~ veg, type = "response"))
+confint(em)
+emcov_df <- data.frame(em$emmeans) 
+```
+
+## Model biomass response to vegetation type
+
+prep biomass data
+```{r}
+
+bio$plotno <- factor(substr(bio$plot_quad,5,6))
+bio$plot <- factor(substr(bio$plot_quad,1,6))
+
+#convert veg type to factor
+bio$vegtype <- factor(substr(bio$plot_quad,1,4), levels = c("ARRI", "ARAR" , "SEEP"))
+
+```
+
+```{r}
+biosum <- bio %>% group_by(vegtype) %>%
+  summarize(mean = mean(resident_g),
+            sd = sd(resident_g))
+
+```
+
+
+```{r}
+#random effects for plot and block (plot no)
+mbio <- lme(log(resident_g) ~ vegtype, random = ~ 1|plotno/plot, data = bio)
+plot(mbio)
+summary(mbio)
+```
+
+Extract means with emmeans for plotting
+```{r}
+#use emmeans to reduce 
+(embio <- emmeans(mbio, specs = revpairwise ~ vegtype, type = "response", adjust= "none"))
+confint(embio)
+embio_df <- data.frame(embio$emmeans) 
+```
+
+change vegetation from code to full name for plotting
+```{r}
+bio$vegtype <- factor(bio$vegtype, labels = c("ARRI"="scab-flat", "ARAR"="low sage-steppe", "SEEP" = "wet meadow"))
+plot_spnovd$veg <- factor(plot_spnovd$veg, labels = c("ARRI"="scab-flat", "ARAR"="low sage-steppe", "SEEP" = "wet meadow"))
+```
+
+
+### Plot results
+plot vedu mean height and confidence intervals at each vegetation tpe
+```{r fig.height=3, fig.width=3}
+pal <- c("#A6761D", "#E6AB02" , "#666666")
+
+( g1 = ggplot(plot_spnovd, aes(y = tcover, x = veg, color = veg)) +
+geom_boxplot()+
+theme_bw(base_size = 14) +
+labs(y = expression("mean foliar cover (%)"))+
+      scale_y_continuous(breaks = c(0,25,50,75,100))+
+scale_color_manual(values = pal))+
+    guides(color = FALSE)+
+theme(panel.grid.minor = element_blank(),
+axis.title.x=element_blank(),# Remove gridlines
+panel.grid.major.x = element_blank())
+
+plot(plot_spnovd$tcover ~ plot_spnovd$veg)
+```
+
+Plot mean resident biomass and 95% CIs at each vegetation type
+```{r fig.height=3, fig.width=3}
+( g2 = ggplot(bio, aes(y = resident_g, x = vegtype, color = vegtype)) +
+geom_boxplot() + 
+theme_bw(base_size = 14) +
+labs(y = "mean resident biomass (g/subplot)")+
+scale_color_manual(values = pal))+
+    guides(color = FALSE)+
+theme(panel.grid.minor = element_blank(),
+axis.title.x=element_blank(),# Remove gridlines
+panel.grid.major.x = element_blank())
+```
+
+combine figures with cowplot
+```{r}
+library(cowplot)
+
+svg("foliar_cover_biomass.svg", width = 7, height = 5)
+
+plot_grid(g2 + theme(panel.grid.minor = element_blank(),
+axis.title.x=element_blank(),# Remove gridlines
+panel.grid.major.x = element_blank()) + guides(color = FALSE), g1 + theme(panel.grid.minor = element_blank(),
+axis.title.x=element_blank(),# Remove gridlines
+panel.grid.major.x = element_blank()) + guides(color = FALSE), labels = c("(a)", "(b)"))
+
+dev.off()
+```
